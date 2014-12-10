@@ -15,7 +15,7 @@ nodeSet = []
 nodeSetId = numberOfNodes
 nodesDict = {}
 linksDict = {}
-threshold = 2
+threshold = 1.5
 nodeSetDict = {}
 
 def initialize() : 
@@ -32,13 +32,13 @@ def initialize() :
     nodeSetId = numberOfNodes
     nodesDict = {}
     linksDict = {}
-    threshold = 2
+    threshold = 1.5
     nodeSetDict = {} 
 
 def getVolume(cluster):
     volume = 0
     for node in cluster:
-        connectedVertices = linksDict[node]
+        connectedVertices = linksDict.get(node,[])
         for vertex in connectedVertices :
             if vertex in cluster:
                 volume = volume + 1
@@ -48,13 +48,13 @@ def getCut(cluster1, cluster2):
     cut = 0
     if len(cluster1) > len(cluster2) :
         for node in cluster2 :
-            connectedVertices = linksDict[node]
+            connectedVertices = linksDict.get(node,[])
             for vertex in connectedVertices :
                 if vertex in cluster1 :
                     cut = cut + 1
     else :
         for node in cluster1 :
-            connectedVertices = linksDict[node]
+            connectedVertices = linksDict.get(node,[])
             for vertex in connectedVertices :
                 if vertex in cluster2 :
                     cut = cut + 1
@@ -128,7 +128,7 @@ def getSecondLargestEigenVector(adjacencyMatrix) :
         eigenVectorList = eigenVector.tolist()
         
         for index,item in enumerate(eigenVectorList[0]) :
-            eigenVectorList[0][index] = round(eigenVectorList[0][index],5)
+            eigenVectorList[0][index] = round(eigenVectorList[0][index].real,5)
         print 'eigenVectorList'    
         print eigenVectorList
         return eigenVectorList[0]
@@ -294,7 +294,7 @@ def graphClustering(nodes, links, nodeSetIdInfo) :
                 nodeSetIdInfo.append(nodeSetId)
             elif len(dummyNodeSetIdInfo) == 1 :
                 nodeSetIdInfo.append(dummyNodeSetIdInfo[0])
-    else :
+    elif result != "ERROR" :
         aDict = {}
         aDict['id'] = nodeSetId + 1
         nodeSetId = nodeSetId + 1
