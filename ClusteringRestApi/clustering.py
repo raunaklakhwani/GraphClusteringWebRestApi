@@ -5,6 +5,9 @@ import random
 import math
 from sets import Set
 from itty import *
+import copy
+import operator
+import Queue
 
 finalClusters = []
 numberOfNodes = 500
@@ -38,7 +41,7 @@ def initialize() :
 def getVolume(cluster):
     volume = 0
     for node in cluster:
-        connectedVertices = linksDict.get(node,[])
+        connectedVertices = linksDict.get(node, [])
         for vertex in connectedVertices :
             if vertex in cluster:
                 volume = volume + 1
@@ -48,13 +51,13 @@ def getCut(cluster1, cluster2):
     cut = 0
     if len(cluster1) > len(cluster2) :
         for node in cluster2 :
-            connectedVertices = linksDict.get(node,[])
+            connectedVertices = linksDict.get(node, [])
             for vertex in connectedVertices :
                 if vertex in cluster1 :
                     cut = cut + 1
     else :
         for node in cluster1 :
-            connectedVertices = linksDict.get(node,[])
+            connectedVertices = linksDict.get(node, [])
             for vertex in connectedVertices :
                 if vertex in cluster2 :
                     cut = cut + 1
@@ -127,8 +130,8 @@ def getSecondLargestEigenVector(adjacencyMatrix) :
         eigenVector = eigenVectors.transpose()[index]
         eigenVectorList = eigenVector.tolist()
         
-        for index,item in enumerate(eigenVectorList[0]) :
-            eigenVectorList[0][index] = round(eigenVectorList[0][index].real,5)
+        for index, item in enumerate(eigenVectorList[0]) :
+            eigenVectorList[0][index] = round(eigenVectorList[0][index].real, 5)
         print 'eigenVectorList'    
         print eigenVectorList
         return eigenVectorList[0]
@@ -189,13 +192,13 @@ def getClusters(nodes, links) :
     
         
     eigenVector = getSecondLargestEigenVector(lap)
-    #eigenVector = eigenVector.real
+    # eigenVector = eigenVector.real
     if eigenVector != None :
         cluster1 = []
         cluster2 = []
         cluster3 = []
-        for i,s in enumerate(eigenVector):
-            #s = eigenVector[0].item(i)
+        for i, s in enumerate(eigenVector):
+            # s = eigenVector[0].item(i)
             if s > 0 :
                 cluster1.append(nodeIds[i])
             elif s < 0 :
@@ -311,7 +314,27 @@ def graphClustering(nodes, links, nodeSetIdInfo) :
         
 
 
-
+def getConnectedComponents(nodes, links) : 
+    print 'connected components'
+    queue = Queue.Queue(maxsize=0)
+    connectedComponents = []
+    for node in nodes:
+        if node.get('considered') is None:
+            conComponent = [node['id']]
+            connectedComponents.append(conComponent)
+            queue.put(node)
+            node['considered'] = True
+            while queue.empty() == False : 
+                nodesConsidered = queue.get()
+                if linksDict.get(nodesConsidered['id']) is not None : 
+                    for nodeId in linksDict.get(nodesConsidered['id']) : 
+                        if(nodesDict[nodeId].get('considered') is None) : 
+                            queue.put(nodesDict[nodeId])
+                            nodesDict[nodeId]['considered'] = True
+                            conComponent.append(nodesDict[nodeId]['id'])
+                        
+                        
+    print connectedComponents
 
     
 
@@ -324,6 +347,12 @@ def clustering(request):
     body = json.loads(request.body)
     nodes = body['nodes']
     links = body['links']
+    originalNodes = copy.deepcopy(nodes)
+    originalLinks = copy.deepcopy(links)
+    
+    
+    
+    
     print nodes
     print links
     nodeIds = []
@@ -334,6 +363,16 @@ def clustering(request):
         nodesDict[node['id']] = node
     # nodeIds = map(str,nodeIds)
     nodeSetIdInfo = []
+    
+    
+    
+    
+    # BFS starts
+    
+    getConnectedComponents(nodes, links)
+    # BFS end
+    
+    
     
     graphClustering(nodeIds, links, nodeSetIdInfo)
     
@@ -360,7 +399,7 @@ def clustering(request):
     #===========================================================================
     setCoordinateOfNodeSet()
     print nodeSet
-    responseString = json.dumps({"nodes" : nodes, "links" : links, "nodeSet" : nodeSet})
+    responseString = json.dumps({"nodes" : originalNodes, "links" : originalLinks, "nodeSet" : nodeSet})
     response = Response(responseString, content_type='application/json')
     response.add_header("Access-Control-Allow-Origin", "*")
     response.add_header("Access-Control-Expose-Headers", "Access-Control-Allow-Origin")
@@ -390,7 +429,105 @@ def setCoordinateOfNodeSet() :
         y = y / numberOfNodes
         eachNodeSet['x'] = x
         eachNodeSet['y'] = y
-        
+
+
+#######################################################################
+####Stacys Algorithm
+#===============================================================================
+# def generateLinksDictionary(links):
+#     for link in links:
+#         source = link['source']['id']
+#         target = link['target']['id']
+#         sourceDict = linksDict.get(source)
+#         if sourceDict :
+#             sourceDict.add(target)
+#         else :
+#             sourceDict = Set([target])
+#             linksDict[source] = sourceDict
+#         
+#         targetDict = linksDict.get(target)
+#         if targetDict :
+#             targetDict.add(source)
+#         else :
+#             targetDict = Set([source])
+#             linksDict[target] = targetDict    
+#         
+#             
+#     return linksDict
+#===============================================================================
+
+def getNextLevelNodes(sourceNode, nodesConnected, excluseNodes) :
+    nextLevelNodes = []
+    nodesConnected = Set(nodesConnected)
+    for node in nodesConnected :
+        if node not in excluseNodes : 
+            if nodesDict[node]['included'] == False : 
+                nextLevelNodes.append(node)
+    return nextLevelNodes
+    
+def generateNodeSet(sourceNode, nodesConnected, excluseNodes) :
+    global nodeSetId 
+    if nodesDict[sourceNode]['included'] == False : 
+        nodesDict[sourceNode]['included'] = True
+        nextLevelNodes = getNextLevelNodes(sourceNode, nodesConnected, excluseNodes)
+        if len(nextLevelNodes) == 0 :
+            return sourceNode
+        else :
+            nodes = [sourceNode]
+            for nextNode in nextLevelNodes :
+                updatedNodesConnected = linksDict[nextNode]
+                excluseNodes = copy.deepcopy(excluseNodes)
+                for nodeConnected in nodesConnected : 
+                    if nodeConnected not in excluseNodes :
+                        excluseNodes.add(nodeConnected)
+                id = generateNodeSet(nextNode, updatedNodesConnected, excluseNodes)
+                if id is not None :
+                    nodes.append(id)
+            
+            aDict = {}
+            aDict['id'] = nodeSetId + 1
+            nodeSetId = nodeSetId + 1
+            aDict['type'] = 'nodeSet'
+            aDict['nodes'] = nodes
+            aDict['x'] = random.randrange(0, width)
+            aDict['y'] = random.randrange(0, height)
+            nodeSet.append(aDict) 
+            return aDict['id']
+    return None
+    
+@post('/post1')    
+def stacyAlgorithm(request) :
+    initialize()
+    print 'Calledx'
+    body = json.loads(request.body)
+    nodes = body['nodes']
+    links = body['links']
+    nodeIds = []
+    
+    for node in nodes:
+        node['included'] = False
+        nodeIds.append(node['id'])
+        nodesDict[node['id']] = node
+    # nodeSetIdInfo = []
+    degreeDict = {}
+    generateLinksDictionary(links)
+    for keys, items in linksDict.items() : 
+        degreeDict[keys] = len(items)
+    
+      
+    tommy = sorted(degreeDict.items(), key=operator.itemgetter(1), reverse=True)   
+    
+    
+    generateNodeSet(tommy[0][0], linksDict[tommy[0][0]], Set([tommy[0][0]]))  
+    setCoordinateOfNodeSet()
+    responseString = json.dumps({"nodes" : nodes, "links" : links, "nodeSet" : nodeSet})
+    response = Response(responseString, content_type='application/json')
+    response.add_header("Access-Control-Allow-Origin", "*")
+    response.add_header("Access-Control-Expose-Headers", "Access-Control-Allow-Origin")
+    # response.add_header("Access-Control-Allow-Headers: Origin, X-Requested-With, Content-Type, Accept")
+    return response
+
+#######################################################################
         
         
         
