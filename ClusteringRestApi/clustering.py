@@ -18,7 +18,7 @@ nodeSet = []
 nodeSetId = numberOfNodes
 nodesDict = {}
 linksDict = {}
-threshold = 1.5
+threshold = 1
 nodeSetDict = {}
 
 def initialize() : 
@@ -35,7 +35,7 @@ def initialize() :
     nodeSetId = numberOfNodes
     nodesDict = {}
     linksDict = {}
-    threshold = 1.5
+    threshold = 1
     nodeSetDict = {} 
 
 def getVolume(cluster):
@@ -309,6 +309,45 @@ def graphClustering(nodes, links, nodeSetIdInfo) :
         finalClusters.append(clusters.pop())
         nodeSetIdInfo.append(nodeSetId)
         
+        
+def graphClusteringUpdated(nodes, links) :
+    global nodeSetId 
+    
+    if len(nodes) > 1 :
+        clusters = getClusters(nodes, links);
+        result = clusters.pop()
+        if result == "OK" :
+            dividedPartsNodeSetInfo = []
+            for cluster in clusters :
+                clusterLinks = [i for i in links if i['source'] in cluster and i['target'] in cluster]
+                nodeSetIdGenerated = graphClusteringUpdated(cluster, clusterLinks)
+                if nodeSetIdGenerated is not None:
+                    dividedPartsNodeSetInfo.append(nodeSetIdGenerated)
+            if len(dividedPartsNodeSetInfo) > 1 : 
+                aDict = {}
+                aDict['id'] = nodeSetId + 1
+                nodeSetId = nodeSetId + 1
+                aDict['type'] = 'nodeSet'
+                aDict['nodes'] = dividedPartsNodeSetInfo
+                aDict['x'] = random.randrange(0, width)
+                aDict['y'] = random.randrange(0, height)
+                nodeSet.append(aDict)
+                return nodeSetId 
+            else : 
+                return None
+        elif result != "ERROR" :
+            aDict = {}
+            aDict['id'] = nodeSetId + 1
+            nodeSetId = nodeSetId + 1
+            aDict['type'] = 'nodeSet'
+            aDict['nodes'] = nodes
+            aDict['x'] = random.randrange(0, width)
+            aDict['y'] = random.randrange(0, height)
+            nodeSet.append(aDict) 
+            return nodeSetId
+    else : 
+        return None
+        
     
     
         
@@ -335,12 +374,14 @@ def getConnectedComponents(nodes, links) :
                         
                         
     print connectedComponents
+    return connectedComponents
 
     
 
 
 @post('/post')
 def clustering(request):
+    global nodeSetId
     initialize()
     print 'Service called'
     # a =  request.POST.get('json')
@@ -369,12 +410,33 @@ def clustering(request):
     
     # BFS starts
     
-    getConnectedComponents(nodes, links)
+    connectedComponents = getConnectedComponents(nodes, links)
     # BFS end
     
     
-    
-    graphClustering(nodeIds, links, nodeSetIdInfo)
+    ## Earlier this stable version available
+    #graphClustering(nodeIds, links, nodeSetIdInfo)
+    ##
+    ## 
+    #Added may be unstable
+    dividedPartsNodeSetInfo = []
+    for connectedComponent in  connectedComponents : 
+        updatedLinks = [i for i in links if i['source'] in connectedComponent and i['target'] in connectedComponent]
+        nodeSetIdGenerated = graphClusteringUpdated(connectedComponent, updatedLinks)
+        if nodeSetIdGenerated is not None : 
+            dividedPartsNodeSetInfo.append(nodeSetIdGenerated)
+    #===========================================================================
+    # if len(dividedPartsNodeSetInfo) > 1 : 
+    #     aDict = {}
+    #     aDict['id'] = nodeSetId + 1
+    #     nodeSetId = nodeSetId + 1
+    #     aDict['type'] = 'nodeSet'
+    #     aDict['nodes'] = dividedPartsNodeSetInfo
+    #     aDict['x'] = random.randrange(0, width)
+    #     aDict['y'] = random.randrange(0, height)
+    #     nodeSet.append(aDict)
+    #===========================================================================
+    ## End
     
     # print finalClusters
     print len(finalClusters)
