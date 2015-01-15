@@ -8,9 +8,11 @@ from itty import *
 import copy
 import operator
 import Queue
+from grandalf.graphs import Vertex, Edge, Graph
+from grandalf.layouts import SugiyamaLayout
 
 finalClusters = []
-numberOfNodes = 500
+numberOfNodes = 10000
 numberOfLinks = 1000
 width = 800
 height = 800
@@ -18,7 +20,7 @@ nodeSet = []
 nodeSetId = numberOfNodes
 nodesDict = {}
 linksDict = {}
-threshold = 1
+threshold = 1.5
 nodeSetDict = {}
 
 def initialize() : 
@@ -27,7 +29,7 @@ def initialize() :
     global nodeSetId, nodesDict, nodesDict, linksDict, threshold, nodeSetDict
     
     finalClusters = []
-    numberOfNodes = 500
+    numberOfNodes = 10000
     numberOfLinks = 1000
     width = 800
     height = 800
@@ -35,7 +37,7 @@ def initialize() :
     nodeSetId = numberOfNodes
     nodesDict = {}
     linksDict = {}
-    threshold = 1
+    threshold = 1.5
     nodeSetDict = {} 
 
 def getVolume(cluster):
@@ -590,6 +592,71 @@ def stacyAlgorithm(request) :
     return response
 
 #######################################################################
+
+
+###########Sugiyama changes begins###############################
+class defaultview(object):
+    w, h = 300, 300
+
+@post('/sugiyama') 
+def sugiyama(request):
+    initialize()
+    body = json.loads(request.body)
+    nodes = body['nodes']
+    links = body['links']
+    print nodes
+    print links
+    nodeIds = []
+    for node in nodes:
+        nodeIds.append(node['id'])
+        nodesDict[node['id']] = node
+    #V = [Vertex(data) for data in range(10)]
+    V = []
+    nodeIdIndexDict = {}
+    index = 0;
+    for node in nodes :
+        V.append(Vertex(node['id']))
+        nodeIdIndexDict[node['id']] = index
+        index = index + 1 
+        
+    X = [(link['source'], link['target']) for link in links]
+    E = [Edge(V[nodeIdIndexDict[v]], V[nodeIdIndexDict[w]]) for (v, w) in X]
+    
+    #===========================================================================
+    # X = [(0,1),(0,2),(1,3),(2,3),(4,0),(1,4),(4,5),(5,6),(3,6),(3,7),(6,8),(7,8),(8,9),(5,9)]
+    # E = [Edge(V[v],V[w]) for (v,w) in X]
+    #===========================================================================
+    g = Graph(V, E)
+    
+    for v in V:
+        v.view = defaultview()
+        
+    connectedComponents = len(g.C)
+    
+    for i in range(connectedComponents):
+        connectedComponent = g.C[i]
+        sug = SugiyamaLayout(connectedComponent)
+        connectedComponentVertices = connectedComponent.V()
+        rootVertex = connectedComponentVertices.next()
+        sug.init_all()      
+        sug.draw(10)
+        for l in sug.layers:
+            for n in l:
+                try : 
+                    nodesDict[n.data]['x'] = n.view.xy[0]
+                    nodesDict[n.data]['y'] = n.view.xy[1]
+                except :
+                    pass
+                
+    
+    responseString = json.dumps({"nodes" : nodes, "links" : links})
+    response = Response(responseString, content_type='application/json')
+    response.add_header("Access-Control-Allow-Origin", "*")
+    response.add_header("Access-Control-Expose-Headers", "Access-Control-Allow-Origin")
+    # response.add_header("Access-Control-Allow-Headers: Origin, X-Requested-With, Content-Type, Accept")
+    return response
+
+###########Sugiyama changes ends###############################
         
         
         
