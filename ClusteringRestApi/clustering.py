@@ -812,6 +812,7 @@ def custom_sugiyam_ranking(request):
     print nodes
     print links
     nodeIds = []
+    initialMinMax = getMinMax(nodes)
     for node in nodes:
         nodeIds.append(node['id'])
         nodesDict[node['id']] = node
@@ -978,6 +979,8 @@ def custom_sugiyam_ranking(request):
                 nodesDict[n.data]['x'] = n.view.xy[0]
                 nodesDict[n.data]['y'] = n.view.xy[1] 
     # Changes ends
+    finalMinMax = getMinMax(nodes)
+    #scaleCoordinates(nodes, initialMinMax, finalMinMax)
     
     responseString = json.dumps({"nodes" : nodes, "links" : links})
     response = Response(responseString, content_type='application/json')
@@ -1104,10 +1107,41 @@ def assignLayers(hierarchyDict, layerNumber, idLayerNumberDict, layerIdNumberDic
         layerNumber = layerNumber + 1
     return layerNumber
 
+def getMinMax(nodes):
+    minX = nodes[0]['x']
+    maxX = nodes[0]['x']
+    minY = nodes[0]['y']
+    maxY = nodes[0]['y']
+    
+    for node in nodes : 
+        if minX > node['x']:
+            minX = node['x']
+        if maxX < node['x']:
+            maxX = node['x']
+        if minY > node['y']:
+            minY = node['y']
+        if maxY < node['y']:
+            maxY = node['y']
+            
+    return {"minX" : minX, "maxX" : maxX, "minY" : minY, "maxY":maxY}
+
+def scaleCoordinates(nodes,initialMinMax,finalMinMax) :
+    ax = (finalMinMax['maxX'] -finalMinMax['minX'])/(initialMinMax['maxX'] -initialMinMax['minX'])
+    ay = (finalMinMax['maxY'] -finalMinMax['minY'])/(initialMinMax['maxY'] -initialMinMax['minY'])
+    bx = (finalMinMax['maxX'] - ax * initialMinMax['maxX'])
+    by = (finalMinMax['maxY'] - ax * initialMinMax['maxY'])
+    for node in nodes : 
+        x = node['x']
+        y = node['y']
+        node['x'] = int(ax * x + bx)
+        node['y'] = int(ay * y + by)
+      
+    print nodes  
+
 # ##Sugiyama method custom ranking ends
         
         
         
 if __name__ == '__main__':
-    run_itty()
+    run_itty(config='sample_conf')
 
