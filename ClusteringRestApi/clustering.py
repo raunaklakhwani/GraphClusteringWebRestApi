@@ -980,9 +980,12 @@ def custom_sugiyam_ranking(request):
                 nodesDict[n.data]['y'] = n.view.xy[1] 
     # Changes ends
     finalMinMax = getMinMax(nodes)
-    #scaleCoordinates(nodes, initialMinMax, finalMinMax)
+    # scaleCoordinates(nodes, initialMinMax, finalMinMax)
+    returnedNodes = copy.deepcopy(nodes)
+    returnedLinks = copy.deepcopy(links)
+    nodeSets = customAggregation(nodes, links)
     
-    responseString = json.dumps({"nodes" : nodes, "links" : links})
+    responseString = json.dumps({"nodes" : returnedNodes, "links" : returnedLinks, "nodeSet" : nodeSets})
     response = Response(responseString, content_type='application/json')
     response.add_header("Access-Control-Allow-Origin", "*")
     response.add_header("Access-Control-Expose-Headers", "Access-Control-Allow-Origin")
@@ -1129,9 +1132,9 @@ def getMinMax(nodes):
             
     return {"minX" : minX, "maxX" : maxX, "minY" : minY, "maxY":maxY}
 
-def scaleCoordinates(nodes,initialMinMax,finalMinMax) :
-    ax = (finalMinMax['maxX'] -finalMinMax['minX'])/(initialMinMax['maxX'] -initialMinMax['minX'])
-    ay = (finalMinMax['maxY'] -finalMinMax['minY'])/(initialMinMax['maxY'] -initialMinMax['minY'])
+def scaleCoordinates(nodes, initialMinMax, finalMinMax) :
+    ax = (finalMinMax['maxX'] - finalMinMax['minX']) / (initialMinMax['maxX'] - initialMinMax['minX'])
+    ay = (finalMinMax['maxY'] - finalMinMax['minY']) / (initialMinMax['maxY'] - initialMinMax['minY'])
     bx = (finalMinMax['maxX'] - ax * initialMinMax['maxX'])
     by = (finalMinMax['maxY'] - ax * initialMinMax['maxY'])
     for node in nodes : 
@@ -1144,7 +1147,269 @@ def scaleCoordinates(nodes,initialMinMax,finalMinMax) :
 
 # ##Sugiyama method custom ranking ends
         
+# ##Aggregation algorithm starts
+def customAggregation(nodes, links):
+    nodeSets = []
+    levelDict = {}
+    for node in nodes :
+        levelNodeList = levelDict.get(node['level'])
+        if levelNodeList is not None:
+            levelNodeList.append(node['id'])
+        else :
+            levelNodeList = [node['id']]
+            levelDict[node['level']] = levelNodeList
+            
+    customAggregationUtil(nodes, links, levelDict, nodeSets)     
+    return nodeSets
 
+def customAggregationUtil(nodes, links, levelDict, nodeSets):
+    levels = levelDict.keys()
+    levels.sort(reverse=True)
+    print levels
+    
+    workingLevel = levels[0]
+    while workingLevel > 1 : 
+        workingTree = getWorkingTree(levelDict, workingLevel)
+        consideredNodes = workingTree['consideredNodes']
+        consideredLinks = workingTree['consideredLinks']
+        parentChildNodesDict = workingTree['parentChildNodesDict']
+        childParentNodesDict = workingTree['childParentNodesDict']
+        returnedNodeSets = generateNodeSets(consideredNodes, consideredLinks, parentChildNodesDict, childParentNodesDict, workingLevel)
+        if returnedNodeSets is not None:
+            nodeSets.extend(returnedNodeSets)
+            isLevelRemoved = updateDataStructures(nodes, links, levelDict, returnedNodeSets)
+            if isLevelRemoved :
+                workingLevel = workingLevel - 1
+        else :
+            workingLevel = workingLevel - 1
+        
+
+def updateDataStructures(nodes, links, levelDict, returnedNodeSets):
+    isLevelRemoved = False
+    for nodeSet in returnedNodeSets:
+        nodesOfNodeSet = nodeSet['nodes']
+        nodes.append(nodeSet)
+        nodeSetLevel = nodeSet['level']
+        levelDict[nodeSetLevel].append(nodeSet['id'])
+        for nodeOfNodeSet in nodesOfNodeSet:
+            level = nodesDict[nodeOfNodeSet]['level']
+            levelDict[level].remove(nodeOfNodeSet)
+            
+            if len(levelDict[level]) == 0:
+                levels = levelDict.keys()
+                levels.sort(reverse=True)
+                maxLevel = levels[0]
+                for i in range(level, maxLevel) :
+                    levelDict[i] = levelDict[i + 1]
+                del levelDict[maxLevel]
+                isLevelRemoved = True
+            
+            
+            
+            nodes.remove(nodesDict[nodeOfNodeSet])
+            del nodesDict[nodeOfNodeSet]
+            
+            connectedNodes = linksDict[nodeOfNodeSet]
+            for connectedNode in connectedNodes:
+                s = linksDict.get(connectedNode)
+                if s is not None and connectedNode not in nodesOfNodeSet:
+                    s.remove(nodeOfNodeSet)
+                    s.add(nodeSet['id'])
+                    
+                    t = linksDict.get(nodeSet['id'])
+                    
+                    if t is not None:
+                        t.add(connectedNode)
+                    else :
+                        linksDict[nodeSet['id']] = Set([connectedNode])
+            del linksDict[nodeOfNodeSet]
+            
+        nodesDict[nodeSet['id']] = nodeSet
+    return isLevelRemoved
+        
+       
+def getWorkingTree(levelDict, level):
+    workingTree = {}
+    levelNodes = levelDict[level]
+    workingNodes = Set([])
+    workingLinks = {}
+    parentChildNodesDict = {}
+    childParentNodesDict = {}
+    for node in levelNodes : 
+        workingNodes.add(node)
+        connectedNodes = linksDict[node]
+        levelsInteractWith = [nodesDict[connectedNode]['level'] for connectedNode in connectedNodes if level - nodesDict[connectedNode]['level'] > 0]
+        if len(levelsInteractWith) > 0 :
+            levelsInteractWith.sort(reverse=True)
+            aboveLevel = levelsInteractWith[0]
+            aboveLevelNodes = [connectedNode for connectedNode in connectedNodes if nodesDict[connectedNode]['level'] == aboveLevel]
+            workingNodes.update(aboveLevelNodes)
+            workingLinks[node] = aboveLevelNodes
+            childParentNodesDict[node] = aboveLevelNodes
+            
+            for aboveLevelNode in aboveLevelNodes: 
+                if parentChildNodesDict.get(aboveLevelNode) is not None:
+                   parentChildNodesDict.get(aboveLevelNode).add(node)
+                else :
+                    parentChildNodesDict[aboveLevelNode] = Set([node])
+    
+    workingTree['consideredNodes'] = workingNodes
+    workingTree['consideredLinks'] = workingLinks
+    workingTree['parentChildNodesDict'] = parentChildNodesDict
+    workingTree['childParentNodesDict'] = childParentNodesDict
+    return workingTree
+    
+def generateNodeSets(consideredNodes, consideredLinks, parentChildNodesDict, childParentNodesDict, level):
+    nodeSets = ruleOne(consideredNodes, consideredLinks, parentChildNodesDict, childParentNodesDict, level)
+    if nodeSets is not None:
+        return nodeSets
+    else :
+        nodeSets = ruleTwo(consideredNodes, consideredLinks, parentChildNodesDict, childParentNodesDict, level)
+        if nodeSets is not None:
+            return nodeSets
+        else :
+            nodeSets = ruleThree(consideredNodes, consideredLinks, parentChildNodesDict, childParentNodesDict, level)
+            if nodeSets is not None:
+                return nodeSets
+            else :
+                return None
+
+def isNodeSetEligible(nodes,level,childNodes) :
+    isNodeSetEligible = True
+    for childNode in childNodes :
+        connectedNodes = linksDict[childNode]
+        for connectedNode in connectedNodes:
+            if level == nodesDict[connectedNode]['level'] and connectedNode not in nodes:
+                isNodeSetEligible = False
+                return isNodeSetEligible    
+    return isNodeSetEligible
+
+def ruleThree(consideredNodes, consideredLinks, parentChildNodesDict, childParentNodesDict, level):
+    global nodeSetId
+    nodeSets = None
+    if len(childParentNodesDict) > 1:
+        intersectionList = []
+        countList = []
+        parents = [value for value in childParentNodesDict.values()]
+        for i in range(len(parents) - 1):
+            parent = Set(parents[i])
+            for j in range(i,len(parents)):
+                neighbourParent = Set(parents[j])
+                intersection = parent.intersection(neighbourParent)
+                if intersection in intersectionList:
+                    index = intersectionList.index(intersection)
+                    countList[index] = countList[index] + 1
+                else :
+                    intersectionList.append(intersection)
+                    countList.append(1)
+        
+        if len(countList) > 0:
+            countIntersectionDict = dict(zip(countList,intersectionList))
+            nodes = countIntersectionDict[max(countList)]
+            if len(nodes) > 1:
+                nodeSet = {}
+                nodeSet['id'] = nodeSetId
+                nodeSetId = nodeSetId + 1
+                nodeSet['type'] = 'nodeSet'
+                nodeSet['nodes'] = nodes
+                nodeSet['y'] = nodesDict[nodes[0]]['y']
+                nodeSet['x'] = sum([nodesDict[node]['x'] for node in nodes])/len(nodes)
+                nodeSet['level'] = nodesDict[nodes[0]]['level']
+                nodeSets = [nodeSet]
+    else:
+        nodes = childParentNodesDict[childParentNodesDict.keys()[0]]
+        if len(nodes) > 1:
+            nodeSet = {}
+            nodeSet['id'] = nodeSetId
+            nodeSetId = nodeSetId + 1
+            nodeSet['type'] = 'nodeSet'
+            nodeSet['nodes'] = nodes
+            nodeSet['y'] = nodesDict[nodes[0]]['y']
+            nodeSet['x'] = sum([nodesDict[node]['x'] for node in nodes])/len(nodes)
+            nodeSet['level'] = nodesDict[nodes[0]]['level']
+            nodeSets = [nodeSet]
+    
+    return nodeSets
+        
+    
+
+def ruleTwo(consideredNodes, consideredLinks, parentChildNodesDict, childParentNodesDict, level):
+    global nodeSetId
+    nodeSets = None
+    parentChildNodesTuple = parentChildNodesDict.items()
+    parentChildNodesTuple.sort(key = lambda item : len(item[1]), reverse = True)
+    
+    for parent,childNodes in parentChildNodesTuple :
+        childNodes = list(childNodes) 
+        nodes = [parent] + childNodes
+        nodeSetEligible = isNodeSetEligible(nodes, nodesDict[parent]['level'], childNodes)
+        if nodeSetEligible:
+            nodeSet = {}
+            nodeSet['id'] = nodeSetId
+            nodeSetId = nodeSetId + 1
+            nodeSet['type'] = 'nodeSet'
+            nodeSet['nodes'] = nodes
+            nodeSet['y'] = nodesDict[parent]['y']
+            nodeSet['x'] = nodesDict[parent]['x']
+            nodeSet['level'] = nodesDict[parent]['level']
+            nodeSets = [nodeSet]
+            return nodeSets
+        else :
+            childNodes.sort()
+            for childNode in childNodes:
+                childNodes.remove(childNode)
+                nodes = [parent] + childNodes
+                if len(nodes) > 1:
+                    nodeSetEligible = isNodeSetEligible(nodes, nodesDict[parent]['level'], childNodes)
+                    if nodeSetEligible:
+                        nodeSet = {}
+                        nodeSet['id'] = nodeSetId
+                        nodeSetId = nodeSetId + 1
+                        nodeSet['type'] = 'nodeSet'
+                        nodeSet['nodes'] = nodes
+                        nodeSet['y'] = nodesDict[parent]['y']
+                        nodeSet['x'] = nodesDict[parent]['x']
+                        nodeSet['level'] = nodesDict[parent]['level']
+                        nodeSets = [nodeSet]
+                        return nodeSets 
+                    else :
+                        childNodes.append(childNode)
+                        childNodes.sort()
+                else:
+                    return nodeSets
+    return nodeSets
+    
+def ruleOne(consideredNodes, consideredLinks, parentChildNodesDict, childParentNodesDict, level):
+    global nodeSetId
+    tempResultDict = {}
+    for parent, childNodes in parentChildNodesDict.items() :
+        if len(childNodes) == 1:
+            childNodes = list(childNodes)
+            tempResultDict[childNodes[0]] = parent
+    
+    if len(tempResultDict) > 0:
+        for child, parent in tempResultDict.items():
+             if len(childParentNodesDict[child]) != 1:
+                 del tempResultDict[child]
+    
+    if len(tempResultDict) > 0:  
+        nodeSets = []
+        for child, parent in tempResultDict.items():
+            nodeSet = {}
+            nodeSet['id'] = nodeSetId
+            nodeSetId = nodeSetId + 1
+            nodeSet['type'] = 'nodeSet'
+            nodeSet['nodes'] = [parent, child]
+            nodeSet['y'] = nodesDict[parent]['y']
+            nodeSet['x'] = nodesDict[parent]['x']
+            nodeSet['level'] = nodesDict[parent]['level']
+            nodeSets.append(nodeSet)
+        return nodeSets
+    else :
+        return None             
+    
+
+# ##Aggregation Algorithm ends
         
         
 if __name__ == '__main__':
