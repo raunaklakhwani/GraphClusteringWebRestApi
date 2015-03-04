@@ -1090,7 +1090,11 @@ def generate_rank_to_data(layerIdNumberDict, V, nodeIdIndexDict):
     rank_to_data = {}
     for layerNumber, layerItems in layerIdNumberDict.items():
         itemList = [V[nodeIdIndexDict[item]] for item in layerItems]
+        
+        for item in layerItems : 
+            nodesDict[item]['level'] = layerNumber
         rank_to_data[layerNumber] = itemList
+        
     return rank_to_data    
     
 
@@ -1140,6 +1144,7 @@ def scaleCoordinates(nodes,initialMinMax,finalMinMax) :
 
 # ##Sugiyama method custom ranking ends
         
+
         
         
 if __name__ == '__main__':
