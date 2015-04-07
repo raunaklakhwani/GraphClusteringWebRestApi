@@ -980,12 +980,15 @@ def custom_sugiyam_ranking(request):
                 nodesDict[n.data]['y'] = n.view.xy[1] 
     # Changes ends
     finalMinMax = getMinMax(nodes)
-    # scaleCoordinates(nodes, initialMinMax, finalMinMax)
+    scaleCoordinates(nodes, initialMinMax, finalMinMax)
     returnedNodes = copy.deepcopy(nodes)
     returnedLinks = copy.deepcopy(links)
     nodeSets = customAggregation(nodes, links)
     
-    responseString = json.dumps({"nodes" : returnedNodes, "links" : returnedLinks, "nodeSet" : nodeSets})
+    responseDict = {"nodes" : returnedNodes, "links" : returnedLinks, "nodeSet" : nodeSets}
+    responseString = json.dumps(responseDict)
+    with open("output.json","w+") as outFile:
+        json.dump(responseDict,outFile)
     response = Response(responseString, content_type='application/json')
     response.add_header("Access-Control-Allow-Origin", "*")
     response.add_header("Access-Control-Expose-Headers", "Access-Control-Allow-Origin")
@@ -1133,10 +1136,10 @@ def getMinMax(nodes):
     return {"minX" : minX, "maxX" : maxX, "minY" : minY, "maxY":maxY}
 
 def scaleCoordinates(nodes, initialMinMax, finalMinMax) :
-    ax = (finalMinMax['maxX'] - finalMinMax['minX']) / (initialMinMax['maxX'] - initialMinMax['minX'])
-    ay = (finalMinMax['maxY'] - finalMinMax['minY']) / (initialMinMax['maxY'] - initialMinMax['minY'])
-    bx = (finalMinMax['maxX'] - ax * initialMinMax['maxX'])
-    by = (finalMinMax['maxY'] - ax * initialMinMax['maxY'])
+    ax = (initialMinMax['maxX'] - initialMinMax['minX']) / (finalMinMax['maxX'] - finalMinMax['minX'])
+    ay = (initialMinMax['maxY'] - initialMinMax['minY']) / (finalMinMax['maxY'] - finalMinMax['minY'])
+    bx = (initialMinMax['maxX'] - ax * finalMinMax['maxX'])
+    by = (initialMinMax['maxY'] - ax * finalMinMax['maxY'])
     for node in nodes : 
         x = node['x']
         y = node['y']
